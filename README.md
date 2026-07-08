@@ -1,6 +1,6 @@
 # TMS 使用指南
 
-<img src="/readme/RMS.png" alt="Logo">
+<img src="/readme/TMS.png" alt="Logo">
 
 ## 全新 TMS3 发布
 

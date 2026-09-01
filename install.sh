@@ -21,11 +21,8 @@ ROUTE_1="https://github.com"
 ROUTE_2="http://cdn.tcminerproxy.com"
 
 ROUTE_EXEC_1="/MinerProxyPro/TMS/raw/main/x86_64-musl/tms"
-ROUTE_EXEC_2="/MinerProxyPro/TMS/raw/main/arm-musleabi/tms"
-ROUTE_EXEC_3="/MinerProxyPro/TMS/raw/main/arm-musleabihf/tms"
-ROUTE_EXEC_4="/MinerProxyPro/TMS/raw/main/armv7-musleabi/tms"
-ROUTE_EXEC_5="/MinerProxyPro/TMS/raw/main/armv7-musleabihf/tms"
-ROUTE_EXEC_6="/MinerProxyPro/TMS/raw/main/aarch64-musl/tms"
+ROUTE_EXEC_2="/MinerProxyPro/TMS/raw/main/armv7-musleabihf/tms"
+ROUTE_EXEC_3="/MinerProxyPro/TMS/raw/main/aarch64-musl/tms"
 
 TARGET_ROUTE=""
 TARGET_ROUTE_EXEC=""
@@ -684,11 +681,8 @@ select_arch() {
     echo "请选择对应架构安装选项，直接回车使用推荐项。"
     echo "---------------------"
     echo "1. x86-64"
-    echo "2. arm-musleabi"
-    echo "3. arm-musleabihf"
-    echo "4. armv7-musleabi"
-    echo "5. armv7-musleabihf"
-    echo "6. aarch64"
+    echo "2. armv7-musleabihf"
+    echo "3. aarch64"
     echo ""
 
     if [ -n "$suggested" ]; then

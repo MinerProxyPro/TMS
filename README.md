@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="image/_logo.svg" width="112" alt="TCMinerProxy Logo">
+
 # TMS
 
 ### 面向矿场局域网的 TCMinerProxy 安全接入客户端

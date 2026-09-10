@@ -2,60 +2,96 @@
 
 <h1><img src="image/logo.png" width="48" height="48" align="absmiddle" alt="TCMinerProxy Logo"> TMS</h1>
 
+**简体中文** | [English](language/readme.md)
+
 ### 面向矿场局域网的 TCMinerProxy 安全接入客户端
 
 集中接入本地矿机，压缩公网流量与出口连接数，并提供配置管理和运行监控。
 
-[客户端下载](https://www.tcminerproxy.com/zh/download/tms-secure-client) · [使用文档](https://www.tcminerproxy.com/zh/document/tcminerproxy) · [GitHub 仓库](https://github.com/MinerProxyPro/TMS) · [TCMinerProxy 服务端](https://github.com/MinerProxyPro/TCMinerProxy)
+**🔐 加密传输 · 🗜️ 流量压缩 · 🔗 连接复用 · 📊 运行监控**
+
+[📥 客户端下载](https://www.tcminerproxy.com/zh/download/tms-secure-client) · [📖 使用文档](https://www.tcminerproxy.com/zh/document/tcminerproxy) · [💻 GitHub 仓库](https://github.com/MinerProxyPro/TMS) · [☁️ TCMinerProxy 服务端](https://github.com/MinerProxyPro/TCMinerProxy)
 
 </div>
 
 > **使用前提：** TMS 需要配合 TCMinerProxy 服务端使用。如果矿机较少、网络稳定且带宽充足，也可以让矿机直接连接 TCMinerProxy。
 
-## 目录
+## 🧭 目录
 
-- [项目简介](#overview)
-- [功能特性](#features)
-- [协议选择](#protocols)
-- [下载与安装](#installation)
-- [首次配置](#configuration)
-- [运行维护](#operations)
-- [常见问题](#faq)
-- [文档与仓库说明](#resources)
+- [🌐 项目简介](#overview)
+- [🧰 功能特性](#features)
+- [🔌 协议选择](#protocols)
+- [📦 下载与安装](#installation)
+- [⚙️ 首次配置](#configuration)
+- [📊 运行维护](#operations)
+- [🛠️ 常见问题](#faq)
+- [📚 文档与仓库说明](#resources)
 
 <a id="overview"></a>
 
-## 项目简介
+## 🌐 项目简介
 
 TMS 通常部署在矿场局域网内。矿机连接本地 TMS，由 TMS 统一接入远程 TCMinerProxy 服务端，再由服务端连接上游矿池。
 
 ```mermaid
+%%{init: {"flowchart": {"curve": "basis", "nodeSpacing": 24, "rankSpacing": 40}}}%%
 flowchart LR
-    A["矿机 / ASIC"] -->|"局域网连接"| B["TMS 本地客户端"]
-    B -->|"压缩、加密、连接复用"| C["TCMinerProxy 服务端"]
-    C --> D["上游矿池"]
+    subgraph LAN["① 矿场局域网"]
+        M1["🖥️ 矿机组 A"]
+        M2["🖥️ 矿机组 B"]
+        TMS(["TMS<br/>本地安全客户端"])
+        M1 --> TMS
+        M2 --> TMS
+    end
+
+    subgraph REMOTE["② 远程接入"]
+        SERVER(["TCMinerProxy<br/>服务端"])
+    end
+
+    subgraph UPSTREAM["③ 上游矿池"]
+        POOL["⛏️ 矿池"]
+    end
+
+    TMS ==>|"🔐 加密传输<br/>流量压缩 · 连接复用"| SERVER
+    SERVER -->|"上游连接"| POOL
+
+    classDef miner fill:#eff6ff,stroke:#93c5fd,color:#1e3a8a,stroke-width:1px
+    classDef client fill:#2563eb,stroke:#1d4ed8,color:#ffffff,stroke-width:2px
+    classDef server fill:#0f766e,stroke:#115e59,color:#ffffff,stroke-width:2px
+    classDef pool fill:#fffbeb,stroke:#fbbf24,color:#78350f,stroke-width:1px
+
+    class M1,M2 miner
+    class TMS client
+    class SERVER server
+    class POOL pool
+
+    style LAN fill:#f8fafc,stroke:#cbd5e1,color:#334155,stroke-width:1px
+    style REMOTE fill:#f0fdfa,stroke:#99f6e4,color:#134e4a,stroke-width:1px
+    style UPSTREAM fill:#fffdf5,stroke:#fde68a,color:#78350f,stroke-width:1px
+    linkStyle default stroke:#64748b,stroke-width:1.5px
+    linkStyle 2 stroke:#2563eb,stroke-width:3px
 ```
 
 通过在本地集中管理连接，TMS 可以减少公网传输量和出口连接数，并支持配置同步、多远程地址负载均衡及运行状态监控。
 
 <a id="features"></a>
 
-## 功能特性
+## 🧰 功能特性
 
 | 功能 | 说明 |
 | --- | --- |
-| 流量压缩 | 支持 TMS3、TMS3(Zstd) 和 TMS3(NB)，用于减少公网传输量 |
-| 连接复用 | 将多台矿机的连接汇聚为更少的公网出口连接 |
-| 加密传输 | 通过受保护的协议链路连接 TCMinerProxy 服务端 |
-| 自动同步 | 使用服务端推送地址，同步端口配置 |
-| 手动配置 | 自行设置本地监听端口、远程服务器、币种、协议和密码 |
-| 负载均衡 | 为同一本地端口配置多个兼容的远程地址，分配连接 |
-| 运行监控 | 查看入口与出口连接数，以及 CPU、内存、网络和端口状态 |
-| 后台访问控制 | 设置登录凭据和自定义安全访问路径 |
+| 🗜️ **流量压缩** | 支持 TMS3、TMS3(Zstd) 和 TMS3(NB)，用于减少公网传输量 |
+| 🔗 **连接复用** | 将多台矿机的连接汇聚为更少的公网出口连接 |
+| 🔐 **加密传输** | 通过受保护的协议链路连接 TCMinerProxy 服务端 |
+| 🔄 **自动同步** | 使用服务端推送地址，同步端口配置 |
+| ⚙️ **手动配置** | 自行设置本地监听端口、远程服务器、币种、协议和密码 |
+| ⚖️ **负载均衡** | 为同一本地端口配置多个兼容的远程地址，分配连接 |
+| 📊 **运行监控** | 查看入口与出口连接数，以及 CPU、内存、网络和端口状态 |
+| 🛡️ **后台访问控制** | 设置登录凭据和自定义安全访问路径 |
 
 <a id="protocols"></a>
 
-## 协议选择
+## 🔌 协议选择
 
 先确认服务端端口使用的协议，再选择对应的客户端配置。
 
@@ -70,9 +106,9 @@ flowchart LR
 
 <a id="installation"></a>
 
-## 下载与安装
+## 📦 下载与安装
 
-### 支持平台
+### 🖥️ 支持平台
 
 | 平台 | 架构或版本 | 安装方式 |
 | --- | --- | --- |
@@ -84,7 +120,7 @@ flowchart LR
 
 OpenWrt 的硬件和发行版差异较大。部署前请确认 CPU 架构，并先接入少量矿机验证兼容性。
 
-### Linux 安装
+### 🐧 Linux 安装
 
 **安装前准备**
 
@@ -132,7 +168,7 @@ http://TMS设备IP:42703
 
 将 `TMS设备IP` 替换为运行 TMS 的设备地址，然后继续阅读[首次配置](#configuration)。
 
-### Windows 下载
+### 🪟 Windows 下载
 
 | 文件 | 用途 | 下载 |
 | --- | --- | --- |
@@ -144,7 +180,7 @@ http://TMS设备IP:42703
 
 <a id="configuration"></a>
 
-## 首次配置
+## ⚙️ 首次配置
 
 ### 1. 准备服务端端口
 
@@ -199,9 +235,9 @@ http://TMS设备IP:42703/private-path/
 
 <a id="operations"></a>
 
-## 运行维护
+## 📊 运行维护
 
-### 连接压缩与调优
+### 🎛️ 连接压缩与调优
 
 TMS3 按本地端口将矿机连接汇聚为较少的公网出口连接。减少出口连接数可以提高连接压缩程度，也可能影响 CPU 负载、延迟和拒绝率。
 
@@ -214,7 +250,7 @@ TMS3 按本地端口将矿机连接汇聚为较少的公网出口连接。减少
 
 不同币种、不同本地端口会分别建立出口连接。扩容或调整参数时，应同时观察 TMS CPU 占用、入口与出口连接数、服务端算力和上游拒绝率。
 
-### Linux 管理菜单
+### 🧰 Linux 管理菜单
 
 再次运行安装命令即可打开管理菜单，进行以下操作：
 
@@ -224,7 +260,7 @@ TMS3 按本地端口将矿机连接汇聚为较少的公网出口连接。减少
 - 启用或关闭开机自启动。
 - 卸载 TMS。
 
-### 默认路径与端口
+### 📂 默认路径与端口
 
 | 项目 | 默认值 |
 | --- | --- |
@@ -241,7 +277,7 @@ TMS3 按本地端口将矿机连接汇聚为较少的公网出口连接。减少
 
 <a id="faq"></a>
 
-## 常见问题
+## 🛠️ 常见问题
 
 <details>
 <summary><strong>Windows 图形界面启动后白屏，如何处理？</strong></summary>
@@ -282,7 +318,7 @@ TMS 是 TCMinerProxy 的可选本地客户端，需要配合对应的服务端�
 
 <a id="resources"></a>
 
-## 文档与仓库说明
+## 📚 文档与仓库说明
 
 ### 文档入口
 

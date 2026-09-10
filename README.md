@@ -144,8 +144,7 @@ bash <(curl -s -L https://raw.githubusercontent.com/MinerProxyPro/TMS/main/insta
 
 已使用 `root` 登录时，可直接执行第二行。按照菜单选择下载线路与 CPU 架构，完成安装。脚本会识别常见架构并提供推荐项，也支持手动选择 `x86-64`、`armv7-musleabihf` 或 `aarch64`。
 
-<details>
-<summary>无法访问 GitHub 时的备用安装入口</summary>
+**无法访问 GitHub 时的备用安装入口**
 
 无法访问 GitHub 时，可使用以下备用线路：
 
@@ -155,8 +154,6 @@ bash <(curl -s -L -k http://cdn.tcminerproxy.com/install.sh)
 ```
 
 该线路使用 HTTP。建议仅在可信网络中使用，并在执行前下载、检查脚本内容。
-
-</details>
 
 **打开管理界面**
 

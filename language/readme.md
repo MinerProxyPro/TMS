@@ -144,8 +144,7 @@ bash <(curl -s -L https://raw.githubusercontent.com/MinerProxyPro/TMS/main/insta
 
 If you are already logged in as `root`, run the second line directly. Follow the menu to select a download source and CPU architecture, then complete the installation. The script detects common architectures and suggests an option; you can also manually select `x86-64`, `armv7-musleabihf`, or `aarch64`.
 
-<details>
-<summary>Alternative installer if GitHub is unavailable</summary>
+**Alternative installer if GitHub is unavailable**
 
 If you cannot access GitHub, use the alternative source below:
 
@@ -155,8 +154,6 @@ bash <(curl -s -L -k http://cdn.tcminerproxy.com/install.sh)
 ```
 
 This source uses HTTP. Use it only on a trusted network, and download and inspect the script before running it.
-
-</details>
 
 **Open the dashboard**
 

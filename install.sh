@@ -507,6 +507,8 @@ show_start_success() {
     echo "|----------------------------------------------------------------|"
     echo "程序启动成功，访问地址：${ip_addr}:${DEFAULT_WEB_PORT}"
     echo "提示：如果需要公网访问，请同时检查云厂商/路由器防火墙。"
+    echo ""
+    echo "技术支持 Telegram：@TCminer006"
     echo "|----------------------------------------------------------------|"
 }
 
@@ -676,7 +678,7 @@ select_arch() {
 
     suggested="$(detect_arch_choice)"
 
-    echo "------RMS Linux------"
+    echo "------TMS Linux------"
     echo "当前 CPU 架构【${UNAME}】"
     echo "请选择对应架构安装选项，直接回车使用推荐项。"
     echo "---------------------"
@@ -708,10 +710,10 @@ select_route() {
     local target_route
     local var_name
 
-    echo "------RMS Linux------"
+    echo "------TMS Linux------"
     echo "请选择下载线路:"
     echo "1. 线路1（GitHub 官方地址，如无法下载请选择其他线路）"
-    echo "2. 线路2"
+    echo "2. 线路2（CDN全球下载线路，优先选择线路1）"
     echo "---------------------"
 
     read -p "$(echo -e "[1-2]（默认 1）：")" target_route
@@ -754,7 +756,7 @@ show_status() {
     pids="$(get_process_pids "$PATH_EXEC" | tr '\n' ' ')"
     service_status="$(get_service_status_text)"
 
-    echo "------RMS 运行状态------"
+    echo "------TMS 运行状态------"
     echo "系统：${OS_NAME}"
     echo "初始化系统：${INIT_SYSTEM}"
     echo "安装目录：${PATH_RMS}"
@@ -790,13 +792,13 @@ show_main_menu() {
         running_text="${YELLOW}未运行${RESET}"
     fi
 
-    echo -e "${BOLD}${BLUE}------RMS Linux------${RESET}"
+    echo -e "${BOLD}${BLUE}------TMS Linux------${RESET}"
     echo -e "状态：${running_text}"
     echo "1. 安装/更新"
-    echo "2. 停止运行 RMS"
-    echo "3. 重启 RMS"
-    echo "4. 卸载 RMS"
-    echo "5. 启动 RMS"
+    echo "2. 停止运行 TMS"
+    echo "3. 重启 TMS"
+    echo "4. 卸载 TMS"
+    echo "5. 启动 TMS"
     echo "6. 查看运行状态"
     echo "7. 查看运行日志"
     echo "8. 查看错误日志"

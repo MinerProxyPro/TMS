@@ -1,16 +1,19 @@
-#!/bin/bash
+#!/bin/sh
+
+# Compatible with OpenWrt BusyBox ash, dash and bash; Bash is not required.
+# Download to a file, then run interactively: sh /path/to/install.sh
 
 APP_NAME="TMS"
 SERVICE_NAME="tmservice"
 INIT_SCRIPT_NAME="tms"
 
-PATH_RMS="/root/tms"
+PATH_TMS="/root/tms"
 PATH_EXEC="tms"
-PATH_BIN="${PATH_RMS}/${PATH_EXEC}"
-PATH_BIN_TMP="${PATH_RMS}/${PATH_EXEC}.tmp"
-PATH_BIN_BAK="${PATH_RMS}/${PATH_EXEC}.bak"
-PATH_NOHUP="${PATH_RMS}/nohup.out"
-PATH_ERR="${PATH_RMS}/err.log"
+PATH_BIN="${PATH_TMS}/${PATH_EXEC}"
+PATH_BIN_TMP="${PATH_TMS}/${PATH_EXEC}.tmp"
+PATH_BIN_BAK="${PATH_TMS}/${PATH_EXEC}.bak"
+PATH_NOHUP="${PATH_TMS}/nohup.out"
+PATH_ERR="${PATH_TMS}/err.log"
 DEFAULT_WEB_PORT="42703"
 
 PROCESS_WAIT_INTERVAL="0.1"
@@ -19,6 +22,7 @@ PROCESS_WAIT_INTERVAL_SUPPORTED=""
 
 ROUTE_1="https://github.com"
 ROUTE_2="http://cdn.tcminerproxy.com"
+ROUTE_3="http://static2.cloudsuan.com"
 
 ROUTE_EXEC_1="/MinerProxyPro/TMS/raw/main/x86_64-musl/tms"
 ROUTE_EXEC_2="/MinerProxyPro/TMS/raw/main/armv7-musleabihf/tms"
@@ -57,17 +61,30 @@ is_systemd_available() {
 }
 
 detect_system() {
-    if [ -f /etc/openwrt_version ]; then
-        IS_OPENWRT=true
-        INIT_SYSTEM="openwrt"
-        OS_ID="openwrt"
-        OS_NAME="OpenWrt"
-        return
-    fi
+    local os_like=""
+
+    IS_OPENWRT=false
+    OS_ID="unknown"
+    OS_NAME="$(uname -s)"
 
     if [ -r /etc/os-release ]; then
         OS_ID=$(sh -c '. /etc/os-release; printf "%s" "${ID:-unknown}"')
         OS_NAME=$(sh -c '. /etc/os-release; printf "%s" "${PRETTY_NAME:-${ID:-unknown}}"')
+        os_like=$(sh -c '. /etc/os-release; printf "%s" "${ID_LIKE:-}"')
+    fi
+
+    case " $OS_ID $os_like " in
+        *" openwrt "*|*" lede "*|*" istoreos "*) IS_OPENWRT=true ;;
+    esac
+
+    if [ -f /etc/openwrt_version ] || [ "$IS_OPENWRT" = true ]; then
+        IS_OPENWRT=true
+        INIT_SYSTEM="openwrt"
+        if [ "$OS_ID" = "unknown" ]; then
+            OS_ID="openwrt"
+            OS_NAME="OpenWrt"
+        fi
+        return
     fi
 
     if is_systemd_available; then
@@ -83,7 +100,7 @@ check_dependencies() {
     local missing=""
     local cmd
 
-    for cmd in id uname mkdir chmod touch rm mv cp grep sed sleep ps awk; do
+    for cmd in id uname mkdir chmod touch rm mv cp cat grep sed sleep ps awk tr; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             missing="${missing} ${cmd}"
         fi
@@ -92,6 +109,13 @@ check_dependencies() {
     if [ -n "$missing" ]; then
         echo "缺少必要命令:${missing}"
         return 1
+    fi
+
+    if [ "$IS_OPENWRT" = true ]; then
+        if [ ! -r /etc/rc.common ] || [ ! -r /lib/functions/procd.sh ]; then
+            echo "缺少 OpenWrt procd 服务组件：/etc/rc.common 或 /lib/functions/procd.sh。"
+            return 1
+        fi
     fi
 
     return 0
@@ -125,21 +149,21 @@ filter_result() {
 }
 
 ensure_runtime_files() {
-    mkdir -p "$PATH_RMS"
-    chmod 755 "$PATH_RMS"
+    mkdir -p "$PATH_TMS" || return 1
+    chmod 755 "$PATH_TMS" || return 1
 
-    [ -f "$PATH_NOHUP" ] || touch "$PATH_NOHUP"
-    [ -f "$PATH_ERR" ] || touch "$PATH_ERR"
+    [ -f "$PATH_NOHUP" ] || touch "$PATH_NOHUP" || return 1
+    [ -f "$PATH_ERR" ] || touch "$PATH_ERR" || return 1
     chmod 640 "$PATH_NOHUP" "$PATH_ERR" 2>/dev/null || true
 }
 
 safe_remove_install_dir() {
-    if [ -z "$PATH_RMS" ] || [ "$PATH_RMS" = "/" ] || [ "$PATH_RMS" != "/root/rms" ]; then
-        echo "检测到不安全的删除路径，已取消：$PATH_RMS"
+    if [ -z "$PATH_TMS" ] || [ "$PATH_TMS" = "/" ] || [ "$PATH_TMS" != "/root/tms" ]; then
+        echo "检测到不安全的删除路径，已取消：$PATH_TMS"
         return 1
     fi
 
-    rm -rf -- "$PATH_RMS"
+    rm -rf -- "$PATH_TMS"
 }
 
 ensure_line() {
@@ -185,20 +209,56 @@ download_file() {
     return "$result"
 }
 
+validate_download() {
+    local file="$1"
+    local header
+    local expected
+    local min_header
+
+    # Check the ELF class, byte order and machine without executing the download.
+    # This rejects empty files, HTML error pages, LFS pointers and wrong builds.
+    [ -s "$file" ] || return 1
+    header=$(LC_ALL=C od -An -v -tx1 -N64 "$file" | tr -d ' \n') || return 1
+    case "$TARGET_ROUTE_EXEC" in
+    "$ROUTE_EXEC_1") expected="7f454c46020101??????????????????????3e00*"; min_header=128 ;;
+    "$ROUTE_EXEC_2") expected="7f454c46010101??????????????????????2800*"; min_header=104 ;;
+    "$ROUTE_EXEC_3") expected="7f454c46020101??????????????????????b700*"; min_header=128 ;;
+    *) return 1 ;;
+    esac
+    [ "${#header}" -ge "$min_header" ] || return 1
+    case "$header" in
+    $expected) return 0 ;;
+    *) return 1 ;;
+    esac
+}
+
 get_process_pids() {
     local process_name="$1"
+    local comm_file
+    local comm
+    local pid
+
+    # Match the kernel process name, never a substring in the command line.
+    # In particular, /root/tms/install.sh must not match the TMS executable.
+    if [ -d /proc/1 ]; then
+        for comm_file in /proc/[0-9]*/comm; do
+            [ -r "$comm_file" ] || continue
+            IFS= read -r comm < "$comm_file" || continue
+            [ "$comm" = "$process_name" ] || continue
+            pid=${comm_file%/comm}
+            printf '%s\n' "${pid##*/}"
+        done
+        return 0
+    fi
 
     if command -v pgrep >/dev/null 2>&1; then
-        if [ "$IS_OPENWRT" = true ]; then
-            pgrep -x "$process_name" 2>/dev/null
-            pgrep -f "$PATH_BIN" 2>/dev/null
-        else
-            pgrep -x "$process_name" 2>/dev/null
-        fi
+        pgrep -x "$process_name" 2>/dev/null
         return
     fi
 
-    ps 2>/dev/null | grep -v grep | grep "$process_name" | awk '{print $1}'
+    ps -A -o pid= -o comm= 2>/dev/null | awk -v name="$process_name" '
+        { sub(/^.*\//, "", $2); if ($2 == name) print $1 }
+    '
 }
 
 check_process() {
@@ -282,13 +342,13 @@ kill_process() {
     local pids
     local pid
 
-    pids=($(get_process_pids "$process_name"))
-    if [ "${#pids[@]}" -eq 0 ]; then
+    pids="$(get_process_pids "$process_name")"
+    if [ -z "$pids" ]; then
         echo "未发现 $process_name 进程。"
         return 0
     fi
 
-    for pid in "${pids[@]}"; do
+    for pid in $pids; do
         echo "停止进程 $pid ..."
         kill -TERM "$pid" 2>/dev/null || true
     done
@@ -299,8 +359,8 @@ kill_process() {
     fi
 
     echo "进程未在超时时间内退出，尝试强制停止。"
-    pids=($(get_process_pids "$process_name"))
-    for pid in "${pids[@]}"; do
+    pids="$(get_process_pids "$process_name")"
+    for pid in $pids; do
         kill -9 "$pid" 2>/dev/null || true
     done
 
@@ -313,9 +373,9 @@ kill_process() {
 # -----------------------------------------------------------------------------
 
 create_systemd_service() {
-    ensure_runtime_files
+    ensure_runtime_files || return 1
 
-    cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
+    cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF || return 1
 [Unit]
 Description=${APP_NAME}
 After=network-online.target
@@ -323,7 +383,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=${PATH_RMS}/
+WorkingDirectory=${PATH_TMS}/
 ExecStart=/bin/sh -c 'exec "\$1" >> "\$2" 2>> "\$3"' sh "${PATH_BIN}" "${PATH_NOHUP}" "${PATH_ERR}"
 Restart=always
 RestartSec=3
@@ -338,21 +398,23 @@ EOF
 }
 
 create_openwrt_init() {
-    ensure_runtime_files
+    ensure_runtime_files || return 1
 
-    cat > "/etc/init.d/${INIT_SCRIPT_NAME}" <<EOF
+    cat > "/etc/init.d/${INIT_SCRIPT_NAME}" <<EOF || return 1
 #!/bin/sh /etc/rc.common
 
 USE_PROCD=1
 START=99
 STOP=10
+WORK_DIR="${PATH_TMS}"
 PROG="${PATH_BIN}"
 NOHUP_LOG="${PATH_NOHUP}"
 ERR_LOG="${PATH_ERR}"
 
 start_service() {
     procd_open_instance
-    procd_set_param command /bin/sh -c "exec \\\"\$PROG\\\" >> \\\"\$NOHUP_LOG\\\" 2>> \\\"\$ERR_LOG\\\""
+    procd_set_param command /bin/sh -c 'cd "\$1" && exec "\$2" >> "\$3" 2>> "\$4"' sh "\$WORK_DIR" "\$PROG" "\$NOHUP_LOG" "\$ERR_LOG"
+    procd_set_param limits nofile="65535 65535"
     procd_set_param respawn
     procd_close_instance
 }
@@ -379,18 +441,18 @@ disable_rc_local_autostart() {
 }
 
 enable_autostart() {
-    ensure_runtime_files
+    ensure_runtime_files || return 1
 
     if [ "$IS_OPENWRT" = true ]; then
-        create_openwrt_init
-        /etc/init.d/${INIT_SCRIPT_NAME} enable
+        create_openwrt_init || return 1
+        /etc/init.d/${INIT_SCRIPT_NAME} enable || return 1
         echo "已设置 OpenWrt 开机启动。"
     elif is_systemd_available; then
-        create_systemd_service
-        systemctl enable "${SERVICE_NAME}.service"
+        create_systemd_service || return 1
+        systemctl enable "${SERVICE_NAME}.service" || return 1
         echo "已设置 systemd 开机启动。"
     else
-        enable_rc_local_autostart
+        enable_rc_local_autostart || return 1
         echo "已写入 /etc/rc.local 开机启动。"
     fi
 }
@@ -437,16 +499,28 @@ disable_firewall() {
         echo "OpenWrt 环境跳过防火墙自动关闭，请按需自行放行端口 ${DEFAULT_WEB_PORT}。"
     elif [ "$OS_ID" = "ubuntu" ] && command -v ufw >/dev/null 2>&1; then
         ufw disable
-    elif [[ "$OS_ID" =~ ^(centos|rhel|rocky|almalinux|fedora)$ ]] && is_systemd_available; then
-        systemctl stop firewalld 2>/dev/null || true
-        systemctl disable firewalld 2>/dev/null || true
     else
-        echo "未知或无需处理的操作系统，跳过防火墙自动关闭。"
+        case "$OS_ID" in
+        centos|rhel|rocky|almalinux|fedora)
+            if is_systemd_available; then
+                systemctl stop firewalld 2>/dev/null || true
+                systemctl disable firewalld 2>/dev/null || true
+            fi
+            ;;
+        *)
+            echo "未知或无需处理的操作系统，跳过防火墙自动关闭。"
+            ;;
+        esac
     fi
 }
 
 change_limit() {
     local changed="n"
+
+    if [ "$IS_OPENWRT" = true ]; then
+        echo "OpenWrt：TMS 的文件描述符上限由 procd 在启动服务时设置为 65535。"
+        return 0
+    fi
 
     echo "解除系统连接数限制"
 
@@ -474,14 +548,14 @@ change_limit() {
     if [ "$changed" = "y" ]; then
         echo "连接数限制已检查/更新为 65535，部分配置需要重启服务器后生效。"
     else
-        echo -n "当前连接数限制："
+        printf '%s' "当前连接数限制："
         ulimit -n
     fi
 }
 
 
 # -----------------------------------------------------------------------------
-# RMS lifecycle
+# TMS lifecycle
 # -----------------------------------------------------------------------------
 
 get_ip() {
@@ -507,13 +581,11 @@ show_start_success() {
     echo "|----------------------------------------------------------------|"
     echo "程序启动成功，访问地址：${ip_addr}:${DEFAULT_WEB_PORT}"
     echo "提示：如果需要公网访问，请同时检查云厂商/路由器防火墙。"
-    echo ""
-    echo "技术支持 Telegram：@TCminer006"
     echo "|----------------------------------------------------------------|"
 }
 
 start() {
-    echo -e "${BLUE}启动程序...${RESET}"
+    printf '%b\n' "${BLUE}启动程序...${RESET}"
 
     if [ ! -f "$PATH_BIN" ]; then
         echo "未找到 ${PATH_BIN}，请先选择安装。"
@@ -527,16 +599,22 @@ start() {
         return 0
     fi
 
-    ensure_runtime_files
+    ensure_runtime_files || return 1
 
     if [ "$IS_OPENWRT" = true ]; then
-        enable_autostart
-        /etc/init.d/${INIT_SCRIPT_NAME} start
+        enable_autostart || {
+            echo "创建或启用 OpenWrt 服务失败。"
+            return 1
+        }
+        /etc/init.d/${INIT_SCRIPT_NAME} start || {
+            echo "提交 OpenWrt 服务启动请求失败，可运行 logread 查看系统日志。"
+            return 1
+        }
     elif is_systemd_available; then
-        enable_autostart
-        systemctl start "${SERVICE_NAME}.service"
+        enable_autostart || return 1
+        systemctl start "${SERVICE_NAME}.service" || return 1
     else
-        enable_autostart
+        enable_autostart || return 1
         nohup "$PATH_BIN" >> "$PATH_NOHUP" 2>> "$PATH_ERR" &
     fi
 
@@ -570,8 +648,49 @@ restart() {
     start
 }
 
-install_app() {
-    local download_url
+# install_app runs in a subshell so these traps cannot leak into other menu actions.
+cleanup_install() {
+    local result="$1"
+    trap - 0
+    # Finish recovery even if the user presses Ctrl+C again.
+    trap '' HUP INT TERM
+
+    if [ "$install_switch_started" = true ] && [ "$install_success" != true ]; then
+        if [ "$install_replacing" = true ]; then
+            if ! stop || check_process "$PATH_EXEC"; then
+                echo "无法停止程序以恢复旧版本；已保留备份：$PATH_BIN_BAK"
+                rm -rf -- "$install_stage"
+                exit 1
+            fi
+            if [ "$install_had_binary" = true ]; then
+                if ! mv -f "$PATH_BIN_BAK" "$PATH_BIN"; then
+                    echo "恢复旧程序失败；请使用备份恢复：$PATH_BIN_BAK"
+                    rm -rf -- "$install_stage"
+                    exit 1
+                fi
+                echo "已恢复旧程序。"
+            fi
+        fi
+        if [ "$install_was_running" = true ]; then
+            if start; then
+                echo "已恢复原有 TMS 运行。"
+            else
+                echo "旧程序重新启动失败，请检查：$PATH_ERR"
+            fi
+        fi
+    fi
+
+    rm -rf -- "$install_stage"
+    exit "$result"
+}
+
+install_app() (
+    install_stage="${PATH_TMS}/.tms-install"
+    install_switch_started=false
+    install_replacing=false
+    install_success=false
+    install_had_binary=false
+    install_was_running=false
 
     if [ -z "$TARGET_ROUTE" ] || [ -z "$TARGET_ROUTE_EXEC" ]; then
         echo "下载线路或架构未选择，取消安装。"
@@ -581,16 +700,13 @@ install_app() {
     echo "开始安装/更新 ${APP_NAME}"
     echo "当前 CPU 架构：${UNAME}"
 
-    disable_firewall
-
     if check_process "$PATH_EXEC"; then
-        echo "发现正在运行的 ${PATH_EXEC}，需要停止后才能继续安装。"
-        echo "输入 1 停止正在运行的 ${PATH_EXEC} 并继续安装，输入 2 取消安装。"
-        read -p "$(echo -e "请选择[1-2]：")" choose
+        echo "发现正在运行的 ${PATH_EXEC}，下载和备份期间会继续运行。"
+        echo "输入 1 先下载、检查并备份，再短暂停止程序以替换更新；输入 2 取消安装。"
+        printf '%s' "请选择[1-2]："
+        IFS= read -r choose || return 1
         case "$choose" in
-        1)
-            stop
-            ;;
+        1) ;;
         2)
             echo "取消安装"
             return 1
@@ -602,37 +718,92 @@ install_app() {
         esac
     fi
 
-    ensure_runtime_files
-    change_limit
+    ensure_runtime_files || return 1
     check_downloader || return 1
-
-    download_url="${TARGET_ROUTE}${TARGET_ROUTE_EXEC}"
-    echo "开始下载程序..."
-
-    rm -f -- "$PATH_BIN_TMP"
-    download_file "$download_url" "$PATH_BIN_TMP"
-    filter_result $? "下载程序"
-
-    chmod 755 "$PATH_BIN_TMP"
-
-    if [ -f "$PATH_BIN" ]; then
-        cp -f "$PATH_BIN" "$PATH_BIN_BAK" 2>/dev/null || true
-        echo "检测到已有安装，已保留旧程序备份：$PATH_BIN_BAK"
-    fi
-
-    if ! mv -f "$PATH_BIN_TMP" "$PATH_BIN"; then
-        echo "替换程序失败。"
-        [ -f "$PATH_BIN_BAK" ] && cp -f "$PATH_BIN_BAK" "$PATH_BIN"
+    if ! command -v od >/dev/null 2>&1; then
+        echo "缺少文件检查工具 od，取消安装。"
         return 1
     fi
 
-    start
-}
+    # The staging directory is also an atomic lock, on the binary's filesystem.
+    if ! mkdir "$install_stage"; then
+        echo "无法创建安装暂存目录，可能有其他安装正在进行：$install_stage"
+        echo "若上次安装被强制终止，请确认没有安装任务后再删除该目录重试。"
+        return 1
+    fi
+    trap 'cleanup_install $?' 0
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+
+    if [ -d "$PATH_BIN" ] || [ -d "$PATH_BIN_BAK" ]; then
+        echo "程序或备份路径被目录占用，取消安装。"
+        return 1
+    fi
+
+    download_url="${TARGET_ROUTE}${TARGET_ROUTE_EXEC}"
+    echo "开始下载程序，现有 TMS 保持运行..."
+    if ! download_file "$download_url" "$install_stage/tms"; then
+        echo "下载失败，未停止或替换现有 TMS。"
+        return 1
+    fi
+    if ! validate_download "$install_stage/tms"; then
+        echo "下载文件为空、格式错误或架构不匹配，未停止或替换现有 TMS。"
+        return 1
+    fi
+    chmod 755 "$install_stage/tms" || return 1
+
+    # Copy the large binary before stopping; never accept a failed/stale backup.
+    if [ -f "$PATH_BIN" ]; then
+        if ! cp -p "$PATH_BIN" "$install_stage/previous" || \
+            ! mv -f "$install_stage/previous" "$PATH_BIN_BAK"; then
+            echo "备份旧程序失败，未停止或替换现有 TMS。"
+            return 1
+        fi
+        install_had_binary=true
+        echo "检测到已有安装，已保留旧程序备份：$PATH_BIN_BAK"
+    fi
+
+    disable_firewall
+    change_limit
+
+    if check_process "$PATH_EXEC"; then
+        install_was_running=true
+        if [ "$install_had_binary" != true ]; then
+            echo "发现运行中的 TMS，但没有可备份的程序文件，取消更新。"
+            return 1
+        fi
+    fi
+
+    echo "下载、检查和备份完成，开始切换程序..."
+    install_switch_started=true
+    if ! stop || check_process "$PATH_EXEC"; then
+        echo "停止程序失败，取消替换。"
+        return 1
+    fi
+
+    # Set this before mv so a signal immediately after rename also rolls back.
+    install_replacing=true
+    if ! mv -f "$install_stage/tms" "$PATH_BIN"; then
+        echo "替换程序失败，正在恢复..."
+        return 1
+    fi
+
+    start || return 1
+    # Catch an immediate crash after the process first appears.
+    sleep 1
+    if ! check_process "$PATH_EXEC"; then
+        echo "新程序启动后退出，正在恢复..."
+        return 1
+    fi
+    install_success=true
+)
 
 uninstall() {
     local confirm
 
-    read -p "$(echo -e "输入 YES 确认卸载：")" confirm
+    printf '%s' "输入 YES 确认卸载："
+    IFS= read -r confirm || return 1
     if [ "$confirm" != "YES" ]; then
         echo "已取消卸载。"
         return 1
@@ -657,13 +828,10 @@ detect_arch_choice() {
         echo "1"
         ;;
     aarch64|arm64)
-        echo "6"
-        ;;
-    armv7l|armv7*)
-        echo "5"
-        ;;
-    armv6l|arm*)
         echo "3"
+        ;;
+    armv7l|armv7*|armhf)
+        echo "2"
         ;;
     *)
         echo ""
@@ -674,7 +842,6 @@ detect_arch_choice() {
 select_arch() {
     local suggested
     local target_exec
-    local var_name
 
     suggested="$(detect_arch_choice)"
 
@@ -688,17 +855,18 @@ select_arch() {
     echo ""
 
     if [ -n "$suggested" ]; then
-        read -p "$(echo -e "[1-6]（推荐 ${suggested}）：")" target_exec
+        printf '%s' "[1-3]（推荐 ${suggested}）："
+        IFS= read -r target_exec || return 1
         [ -n "$target_exec" ] || target_exec="$suggested"
     else
-        read -p "$(echo -e "[1-6]：")" target_exec
+        printf '%s' "[1-3]："
+        IFS= read -r target_exec || return 1
     fi
 
     case "$target_exec" in
-    1|2|3|4|5|6)
-        var_name="ROUTE_EXEC_${target_exec}"
-        TARGET_ROUTE_EXEC="${!var_name}"
-        ;;
+    1) TARGET_ROUTE_EXEC="$ROUTE_EXEC_1" ;;
+    2) TARGET_ROUTE_EXEC="$ROUTE_EXEC_2" ;;
+    3) TARGET_ROUTE_EXEC="$ROUTE_EXEC_3" ;;
     *)
         echo "错误的架构选择命令"
         return 1
@@ -708,22 +876,24 @@ select_arch() {
 
 select_route() {
     local target_route
-    local var_name
 
     echo "------TMS Linux------"
-    echo "请选择下载线路:"
-    echo "1. 线路1（GitHub 官方地址，如无法下载请选择其他线路）"
-    echo "2. 线路2（CDN全球下载线路，优先选择线路1）"
+    echo "请选择下载线路："
+    echo "1. 线路1（GitHub）"
+    echo "2. 线路2（Cloudflare）"
+    echo "3. 线路3"
+    echo ""   
+    echo "提示：下载速度因网络环境而异，如下载失败或速度较慢，可重新运行脚本并尝试其他线路。"
     echo "---------------------"
 
-    read -p "$(echo -e "[1-2]（默认 1）：")" target_route
+    printf '%s' "[1-3]（默认 1）："
+    IFS= read -r target_route || return 1
     [ -n "$target_route" ] || target_route="1"
 
     case "$target_route" in
-    1|2)
-        var_name="ROUTE_${target_route}"
-        TARGET_ROUTE="${!var_name}"
-        ;;
+    1) TARGET_ROUTE="$ROUTE_1" ;;
+    2) TARGET_ROUTE="$ROUTE_2" ;;
+    3) TARGET_ROUTE="$ROUTE_3" ;;
     *)
         echo "错误的线路选择命令"
         return 1
@@ -759,7 +929,7 @@ show_status() {
     echo "------TMS 运行状态------"
     echo "系统：${OS_NAME}"
     echo "初始化系统：${INIT_SYSTEM}"
-    echo "安装目录：${PATH_RMS}"
+    echo "安装目录：${PATH_TMS}"
     echo "程序文件：$([ -f "$PATH_BIN" ] && echo "存在" || echo "不存在")"
     echo "服务状态：${service_status}"
     echo "进程状态：$([ -n "$pids" ] && echo "运行中 (${pids})" || echo "未运行")"
@@ -792,8 +962,8 @@ show_main_menu() {
         running_text="${YELLOW}未运行${RESET}"
     fi
 
-    echo -e "${BOLD}${BLUE}------TMS Linux------${RESET}"
-    echo -e "状态：${running_text}"
+    printf '%b\n' "${BOLD}${BLUE}------TMS Linux------${RESET}"
+    printf '%b\n' "状态：${running_text}"
     echo "1. 安装/更新"
     echo "2. 停止运行 TMS"
     echo "3. 重启 TMS"
@@ -861,7 +1031,8 @@ main() {
     check_dependencies || exit 1
 
     show_main_menu
-    read -p "$(echo -e "[1-10]：")" comm
+    printf '%s' "[1-10]："
+    IFS= read -r comm || return 1
     dispatch_menu_choice "$comm"
 }
 

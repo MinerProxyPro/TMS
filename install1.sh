@@ -597,13 +597,13 @@ show_start_success() {
 
     echo "|--------------------TMS 局域网加密客户端 -------------------|"
     echo ""   
-    echo -e "\033[32m程序启动成功，访问地址：http://${ip_addr}:${DEFAULT_WEB_PORT}\033[0m"
-    echo "提示：如果需要公网访问，请同时检查云厂商/路由器防火墙。"
+    echo -e "  \033[32m程序启动成功，访问地址：http://${ip_addr}:${DEFAULT_WEB_PORT}\033[0m"
+    echo "  提示：如果需要公网访问，请同时检查云厂商/路由器防火墙。"
     echo ""
-    echo "加密隧道 流量压缩 节省带宽 降低延时 极致稳定 "   
+    echo "  加密隧道 流量压缩 节省带宽 降低延时 极致稳定 "   
     echo ""
-    echo "技术支持"   
-    echo "Telegram：@TCMiner006"   
+    echo "  技术支持"   
+    echo "  Telegram：@TCMiner006"   
     echo ""   
     echo "|-----------------------------------------------------------|"
 }

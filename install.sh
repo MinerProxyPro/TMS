@@ -595,7 +595,8 @@ show_start_success() {
     ip_addr="$(get_ip)"
     [ -n "$ip_addr" ] || ip_addr="局域网IP"
 
-    clear
+    printf '\033c'
+
 
     echo "|------------------TMS 局域网加密客户端 -----------------|"
     echo ""   

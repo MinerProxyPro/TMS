@@ -595,6 +595,8 @@ show_start_success() {
     ip_addr="$(get_ip)"
     [ -n "$ip_addr" ] || ip_addr="局域网IP"
 
+    clear
+
     echo "|------------------TMS 局域网加密客户端 -----------------|"
     echo ""   
     echo -e "\033[32m程序启动成功，访问地址：http://${ip_addr}:${DEFAULT_WEB_PORT}\033[0m"

@@ -594,9 +594,9 @@ show_start_success() {
 
     echo "|--------------------TMS 局域网加密客户端 -------------------|"
     echo ""   
-    echo -e "\033[32m程序启动成功，访问地址：${ip_addr}:${DEFAULT_WEB_PORT}\033[0m"
+    echo -e "\033[32m程序启动成功，访问地址：http://${ip_addr}:${DEFAULT_WEB_PORT}\033[0m"
     echo "提示：如果需要公网访问，请同时检查云厂商/路由器防火墙。"
-
+    echo ""
     echo "加密隧道 流量压缩 节省带宽 降低延时 极致稳定 "   
     echo ""
     echo "技术支持"   
@@ -937,7 +937,7 @@ measure_route_latencies() {
         return 0
     fi
     probe_dir=$(mktemp -d "${TMPDIR:-/tmp}/tms-route.XXXXXX" 2>/dev/null) || return 0
-    echo "正在检测线路响应延迟（最多约 4 秒）…"
+    echo -e "\033[32m正在检测线路响应延迟（最多约 4 秒）…\033[0m"
     probe_route_latency "${ROUTE_1}${TARGET_ROUTE_EXEC}" > "$probe_dir/1" &
     pid1=$!
     probe_route_latency "${ROUTE_2}${TARGET_ROUTE_EXEC}" > "$probe_dir/2" &
@@ -959,7 +959,9 @@ select_route() {
     measure_route_latencies
 
     echo "------TMS Linux------"
+    echo ""    
     echo "请选择下载线路："
+    echo ""    
     echo "1. 线路1（Github）    ${ROUTE_LATENCY_1:-未检测}"
     echo "2. 线路2（Cloudflare）       ${ROUTE_LATENCY_2:-未检测}"
     echo "3. 线路3（内网部署选这个）        ${ROUTE_LATENCY_3:-未检测}"

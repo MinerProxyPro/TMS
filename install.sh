@@ -10,7 +10,6 @@ INIT_SCRIPT_NAME="tms"
 PATH_TMS="/root/tms"
 PATH_EXEC="tms"
 PATH_BIN="${PATH_TMS}/${PATH_EXEC}"
-PATH_BIN_TMP="${PATH_TMS}/${PATH_EXEC}.tmp"
 PATH_BIN_BAK="${PATH_TMS}/${PATH_EXEC}.bak"
 PATH_NOHUP="${PATH_TMS}/nohup.out"
 PATH_ERR="${PATH_TMS}/err.log"
@@ -27,6 +26,7 @@ ROUTE_3="http://static2.cloudsuan.com"
 ROUTE_EXEC_1="/MinerProxyPro/TMS/raw/main/x86_64-musl/tms"
 ROUTE_EXEC_2="/MinerProxyPro/TMS/raw/main/armv7-musleabihf/tms"
 ROUTE_EXEC_3="/MinerProxyPro/TMS/raw/main/aarch64-musl/tms"
+
 
 TARGET_ROUTE=""
 TARGET_ROUTE_EXEC=""
@@ -214,22 +214,36 @@ validate_download() {
     local header
     local expected
     local min_header
+    local reader
 
     # Check the ELF class, byte order and machine without executing the download.
     # This rejects empty files, HTML error pages, LFS pointers and wrong builds.
     [ -s "$file" ] || return 1
-    header=$(LC_ALL=C od -An -v -tx1 -N64 "$file" | tr -d ' \n') || return 1
     case "$TARGET_ROUTE_EXEC" in
     "$ROUTE_EXEC_1") expected="7f454c46020101??????????????????????3e00*"; min_header=128 ;;
     "$ROUTE_EXEC_2") expected="7f454c46010101??????????????????????2800*"; min_header=104 ;;
     "$ROUTE_EXEC_3") expected="7f454c46020101??????????????????????b700*"; min_header=128 ;;
     *) return 1 ;;
     esac
-    [ "${#header}" -ge "$min_header" ] || return 1
-    case "$header" in
-    $expected) return 0 ;;
-    *) return 1 ;;
-    esac
+    # Some embedded BusyBox builds have an od applet that silently returns no
+    # output. Try hexdump too when od is missing, fails, or yields a bad header.
+    for reader in od hexdump; do
+        command -v "$reader" >/dev/null 2>&1 || continue
+        case "$reader" in
+        od) header=$(LC_ALL=C od -An -v -tx1 -N64 "$file" 2>/dev/null) || continue ;;
+        hexdump) header=$(LC_ALL=C hexdump -v -n 64 -e '1/1 "%02x"' "$file" 2>/dev/null) || continue ;;
+        esac
+        # Character classes are optional in BusyBox tr; use explicit whitespace.
+        header=$(printf '%s' "$header" | LC_ALL=C tr -d ' \t\r\n') || continue
+        case "$header" in
+        ''|*[!0123456789abcdef]*) continue ;;
+        esac
+        [ "${#header}" -ge "$min_header" ] || continue
+        case "$header" in
+        $expected) return 0 ;;
+        esac
+    done
+    return 1
 }
 
 get_process_pids() {
@@ -345,6 +359,7 @@ kill_process() {
     pids="$(get_process_pids "$process_name")"
     if [ -z "$pids" ]; then
         echo "未发现 $process_name 进程。"
+        echo ""
         return 0
     fi
 
@@ -451,6 +466,8 @@ enable_autostart() {
         create_systemd_service || return 1
         systemctl enable "${SERVICE_NAME}.service" || return 1
         echo "已设置 systemd 开机启动。"
+        echo ""
+        echo ""
     else
         enable_rc_local_autostart || return 1
         echo "已写入 /etc/rc.local 开机启动。"
@@ -578,10 +595,17 @@ show_start_success() {
     ip_addr="$(get_ip)"
     [ -n "$ip_addr" ] || ip_addr="局域网IP"
 
-    echo "|----------------------------------------------------------------|"
-    echo "程序启动成功，访问地址：${ip_addr}:${DEFAULT_WEB_PORT}"
+    echo "|------------------TMS 局域网加密客户端 -----------------|"
+    echo ""   
+    echo -e "\033[32m程序启动成功，访问地址：http://${ip_addr}:${DEFAULT_WEB_PORT}\033[0m"
     echo "提示：如果需要公网访问，请同时检查云厂商/路由器防火墙。"
-    echo "|----------------------------------------------------------------|"
+    echo ""
+    echo "加密隧道 流量压缩 节省带宽 降低延时 极致稳定 "   
+    echo ""
+    echo "技术支持"   
+    echo "Telegram：@TCMiner006"   
+    echo ""   
+    echo "|-------------------------------------------------------|"
 }
 
 start() {
@@ -697,12 +721,15 @@ install_app() (
         return 1
     fi
 
-    echo "开始安装/更新 ${APP_NAME}"
+    echo -e "\033[32m开始安装/更新 ${APP_NAME}...\033[0m"
     echo "当前 CPU 架构：${UNAME}"
+    echo "安装版本：TMS 完整版（带轻量上网行为模拟，默认关闭）"
+    echo ""
 
     if check_process "$PATH_EXEC"; then
         echo "发现正在运行的 ${PATH_EXEC}，下载和备份期间会继续运行。"
         echo "输入 1 先下载、检查并备份，再短暂停止程序以替换更新；输入 2 取消安装。"
+        echo ""
         printf '%s' "请选择[1-2]："
         IFS= read -r choose || return 1
         case "$choose" in
@@ -720,8 +747,8 @@ install_app() (
 
     ensure_runtime_files || return 1
     check_downloader || return 1
-    if ! command -v od >/dev/null 2>&1; then
-        echo "缺少文件检查工具 od，取消安装。"
+    if ! command -v od >/dev/null 2>&1 && ! command -v hexdump >/dev/null 2>&1; then
+        echo "缺少文件检查工具 od 和 hexdump，取消安装。"
         return 1
     fi
 
@@ -743,6 +770,7 @@ install_app() (
 
     download_url="${TARGET_ROUTE}${TARGET_ROUTE_EXEC}"
     echo "开始下载程序，现有 TMS 保持运行..."
+    echo ""
     if ! download_file "$download_url" "$install_stage/tms"; then
         echo "下载失败，未停止或替换现有 TMS。"
         return 1
@@ -776,6 +804,7 @@ install_app() (
     fi
 
     echo "下载、检查和备份完成，开始切换程序..."
+    echo ""
     install_switch_started=true
     if ! stop || check_process "$PATH_EXEC"; then
         echo "停止程序失败，取消替换。"
@@ -874,16 +903,80 @@ select_arch() {
     esac
 }
 
+
+probe_route_latency() {
+    local result status elapsed code
+
+    # HEAD checks the selected binary without downloading it. Include DNS,
+    # connection, TLS and redirects in the displayed HTTP response time.
+    result=$(LC_ALL=C curl -q --silent --head --location --max-redirs 5 \
+        --connect-timeout 2 --max-time 4 --retry 0 --output /dev/null \
+        --write-out '%{http_code} %{time_total}' "$1" 2>/dev/null)
+    code=$?
+    case "$code" in
+        0) ;;
+        28) printf '%s\n' '超时'; return ;;
+        *) printf '%s\n' '连接失败'; return ;;
+    esac
+    status=${result%% *}
+    elapsed=${result#* }
+    case "$status" in
+        2[0-9][0-9])
+            LC_ALL=C awk -v seconds="$elapsed" 'BEGIN {
+                if (seconds ~ /^[0-9]+([.][0-9]+)?$/)
+                    printf "%.0f ms\n", seconds * 1000;
+                else print "未检测";
+            }'
+            ;;
+        *) printf '不可用（HTTP %s）\n' "$status" ;;
+    esac
+}
+
+measure_route_latencies() {
+    local probe_dir pid1 pid2 pid3
+
+    ROUTE_LATENCY_1="未检测"
+    ROUTE_LATENCY_2="未检测"
+    ROUTE_LATENCY_3="未检测"
+    if ! command -v curl >/dev/null 2>&1; then
+        ROUTE_LATENCY_1="未检测（缺少 curl）"
+        ROUTE_LATENCY_2="$ROUTE_LATENCY_1"
+        ROUTE_LATENCY_3="$ROUTE_LATENCY_1"
+        return 0
+    fi
+    probe_dir=$(mktemp -d "${TMPDIR:-/tmp}/tms-route.XXXXXX" 2>/dev/null) || return 0
+    echo -e "\033[32m正在检测线路响应延迟（最多约 4 秒）…\033[0m"
+    probe_route_latency "${ROUTE_1}${TARGET_ROUTE_EXEC}" > "$probe_dir/1" &
+    pid1=$!
+    probe_route_latency "${ROUTE_2}${TARGET_ROUTE_EXEC}" > "$probe_dir/2" &
+    pid2=$!
+    probe_route_latency "${ROUTE_3}${TARGET_ROUTE_EXEC}" > "$probe_dir/3" &
+    pid3=$!
+    wait "$pid1" || true
+    wait "$pid2" || true
+    wait "$pid3" || true
+    ROUTE_LATENCY_1=$(cat "$probe_dir/1")
+    ROUTE_LATENCY_2=$(cat "$probe_dir/2")
+    ROUTE_LATENCY_3=$(cat "$probe_dir/3")
+    rm -rf -- "$probe_dir"
+}
+
 select_route() {
     local target_route
 
+    measure_route_latencies
+
     echo "------TMS Linux------"
+    echo ""    
     echo "请选择下载线路："
-    echo "1. 线路1（GitHub）"
-    echo "2. 线路2（Cloudflare）"
-    echo "3. 线路3"
-    echo ""   
+    echo ""    
+    echo "1. 线路1（Github）    ${ROUTE_LATENCY_1:-未检测}"
+    echo "2. 线路2（Cloudflare）       ${ROUTE_LATENCY_2:-未检测}"
+    echo "3. 线路3（内网部署选这个）        ${ROUTE_LATENCY_3:-未检测}"
+    echo ""    
+    echo "提示：以上为 HTTP 响应延迟，仅供参考，不代表实际下载速度；未检测或检测失败仍可选择。"
     echo "提示：下载速度因网络环境而异，如下载失败或速度较慢，可重新运行脚本并尝试其他线路。"
+    echo ""    
     echo "---------------------"
 
     printf '%s' "[1-3]（默认 1）："

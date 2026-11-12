@@ -359,6 +359,7 @@ kill_process() {
     pids="$(get_process_pids "$process_name")"
     if [ -z "$pids" ]; then
         echo "未发现 $process_name 进程。"
+        echo ""
         return 0
     fi
 
@@ -465,6 +466,8 @@ enable_autostart() {
         create_systemd_service || return 1
         systemctl enable "${SERVICE_NAME}.service" || return 1
         echo "已设置 systemd 开机启动。"
+        echo ""
+        echo ""
     else
         enable_rc_local_autostart || return 1
         echo "已写入 /etc/rc.local 开机启动。"
@@ -600,7 +603,8 @@ show_start_success() {
     echo "加密隧道 流量压缩 节省带宽 降低延时 极致稳定 "   
     echo ""
     echo "技术支持"   
-    echo "Telegram：@TCMiner006"      
+    echo "Telegram：@TCMiner006"   
+    echo ""   
     echo "|-----------------------------------------------------------|"
 }
 
@@ -717,13 +721,15 @@ install_app() (
         return 1
     fi
 
-    echo "开始安装/更新 ${APP_NAME}"
+    echo -e "\033[32m开始安装/更新 ${APP_NAME}...\033[0m"
     echo "当前 CPU 架构：${UNAME}"
     echo "安装版本：TMS 完整版（带轻量上网行为模拟，默认关闭）"
+    echo ""
 
     if check_process "$PATH_EXEC"; then
         echo "发现正在运行的 ${PATH_EXEC}，下载和备份期间会继续运行。"
         echo "输入 1 先下载、检查并备份，再短暂停止程序以替换更新；输入 2 取消安装。"
+        echo ""
         printf '%s' "请选择[1-2]："
         IFS= read -r choose || return 1
         case "$choose" in
@@ -764,6 +770,7 @@ install_app() (
 
     download_url="${TARGET_ROUTE}${TARGET_ROUTE_EXEC}"
     echo "开始下载程序，现有 TMS 保持运行..."
+    echo ""
     if ! download_file "$download_url" "$install_stage/tms"; then
         echo "下载失败，未停止或替换现有 TMS。"
         return 1
@@ -797,6 +804,7 @@ install_app() (
     fi
 
     echo "下载、检查和备份完成，开始切换程序..."
+    echo ""
     install_switch_started=true
     if ! stop || check_process "$PATH_EXEC"; then
         echo "停止程序失败，取消替换。"

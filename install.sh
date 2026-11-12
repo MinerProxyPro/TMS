@@ -21,7 +21,7 @@ PROCESS_WAIT_INTERVAL_SUPPORTED=""
 
 ROUTE_1="https://github.com"
 ROUTE_2="http://cdn.tcminerproxy.com"
-ROUTE_3="http://static2.cloudsuan.com"
+ROUTE_3=""
 
 ROUTE_EXEC_1="/MinerProxyPro/TMS/raw/main/x86_64-musl/tms"
 ROUTE_EXEC_2="/MinerProxyPro/TMS/raw/main/armv7-musleabihf/tms"
@@ -937,7 +937,6 @@ measure_route_latencies() {
 
     ROUTE_LATENCY_1="未检测"
     ROUTE_LATENCY_2="未检测"
-    ROUTE_LATENCY_3="未检测"
     if ! command -v curl >/dev/null 2>&1; then
         ROUTE_LATENCY_1="未检测（缺少 curl）"
         ROUTE_LATENCY_2="$ROUTE_LATENCY_1"
@@ -972,14 +971,13 @@ select_route() {
     echo ""    
     echo "1. 线路1（Github）    ${ROUTE_LATENCY_1:-未检测}"
     echo "2. 线路2（Cloudflare）       ${ROUTE_LATENCY_2:-未检测}"
-    echo "3. 线路3（内网部署选这个）        ${ROUTE_LATENCY_3:-未检测}"
     echo ""    
     echo "提示：以上为 HTTP 响应延迟，仅供参考，不代表实际下载速度；未检测或检测失败仍可选择。"
     echo "提示：下载速度因网络环境而异，如下载失败或速度较慢，可重新运行脚本并尝试其他线路。"
     echo ""    
     echo "---------------------"
 
-    printf '%s' "[1-3]（默认 1）："
+    printf '%s' "[1-2]（默认 1）："
     IFS= read -r target_route || return 1
     [ -n "$target_route" ] || target_route="1"
 
